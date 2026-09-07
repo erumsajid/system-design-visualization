@@ -1,0 +1,818 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>System Design Flow Explorer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #0F1319;
+    --panel: #161C25;
+    --panel-2: #1C2430;
+    --border: #2A3340;
+    --text: #E6EAF0;
+    --text-dim: #8892A0;
+    --accent: #E3A008;
+    --accent-dim: #6B5323;
+    --easy: #5A9B76;
+    --medium: #C99A3E;
+    --hard: #C06A5C;
+    --edge: #4A5563;
+    --node-client: #1C2531;
+    --node-client-b: #3A4658;
+    --node-gateway: #1E2A38;
+    --node-gateway-b: #3E5670;
+    --node-service: #1F2A3E;
+    --node-service-b: #4A6FA0;
+    --node-queue: #2C2517;
+    --node-queue-b: #8A6B2E;
+    --node-cache: #16292A;
+    --node-cache-b: #3E8E82;
+    --node-db: #241A2E;
+    --node-db-b: #7C5CBF;
+    --node-external-b: #5A6472;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:'IBM Plex Sans',sans-serif;}
+  body{min-height:100vh;}
+  .app{display:grid;grid-template-columns:280px 1fr;min-height:100vh;}
+  @media (max-width:860px){.app{grid-template-columns:1fr;}}
+
+  /* Sidebar */
+  .sidebar{background:var(--panel);border-right:1px solid var(--border);padding:20px 16px;display:flex;flex-direction:column;gap:14px;}
+  .brand{display:flex;flex-direction:column;gap:2px;padding-bottom:10px;border-bottom:1px solid var(--border);}
+  .brand h1{font-size:15px;margin:0;font-weight:600;letter-spacing:0.2px;}
+  .brand p{margin:0;font-size:12px;color:var(--text-dim);font-family:'IBM Plex Mono',monospace;}
+  .search input{width:100%;padding:8px 10px;background:var(--panel-2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:'IBM Plex Mono',monospace;font-size:12.5px;outline:none;}
+  .search input:focus{border-color:var(--accent-dim);}
+  .search input::placeholder{color:var(--text-dim);}
+  .filters{display:flex;gap:6px;}
+  .filters button{flex:1;padding:6px 4px;background:var(--panel-2);border:1px solid var(--border);border-radius:5px;color:var(--text-dim);font-size:11px;font-family:'IBM Plex Mono',monospace;cursor:pointer;}
+  .filters button.active{color:var(--bg);border-color:transparent;}
+  .filters button[data-d="Easy"].active{background:var(--easy);}
+  .filters button[data-d="Medium"].active{background:var(--medium);}
+  .filters button[data-d="Hard"].active{background:var(--hard);}
+  .filters button[data-d="All"].active{background:var(--accent);}
+
+  .topic-list{overflow-y:auto;flex:1;}
+  .group-label{font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);margin:14px 0 6px;font-family:'IBM Plex Mono',monospace;}
+  .group-label:first-child{margin-top:0;}
+  .topic-btn{width:100%;text-align:left;background:transparent;border:1px solid transparent;border-radius:6px;padding:8px 9px;color:var(--text);font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px;font-family:'IBM Plex Sans',sans-serif;}
+  .topic-btn:hover{background:var(--panel-2);}
+  .topic-btn.selected{background:var(--panel-2);border-color:var(--border);}
+  .topic-btn.selected .dot{background:var(--accent);}
+  .dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;}
+  .dot.Easy{background:var(--easy);}
+  .dot.Medium{background:var(--medium);}
+  .dot.Hard{background:var(--hard);}
+
+  /* Main */
+  .main{padding:22px 26px;display:flex;flex-direction:column;gap:16px;min-width:0;}
+  .header-row{display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:8px;}
+  .header-row h2{margin:0;font-size:20px;font-weight:600;}
+  .badge{font-family:'IBM Plex Mono',monospace;font-size:11px;padding:3px 9px;border-radius:20px;border:1px solid var(--border);color:var(--text-dim);}
+  .badge.Easy{color:var(--easy);border-color:var(--easy);}
+  .badge.Medium{color:var(--medium);border-color:var(--medium);}
+  .badge.Hard{color:var(--hard);border-color:var(--hard);}
+
+  .legend{display:flex;flex-wrap:wrap;gap:14px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-dim);}
+  .legend span{display:inline-flex;align-items:center;gap:6px;}
+  .legend i{width:12px;height:12px;border-radius:3px;display:inline-block;border:1.5px solid;}
+
+  .canvas-wrap{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:10px;overflow:auto;}
+  svg{display:block;}
+  .node rect, .node path, .node ellipse{stroke-width:1.4px;}
+  .node text{fill:var(--text);font-family:'IBM Plex Mono',monospace;font-size:12px;pointer-events:none;}
+  .node{cursor:pointer;}
+  .node.dim{opacity:0.35;}
+  .edge-path{fill:none;stroke:var(--edge);stroke-width:1.6px;transition:opacity .15s, stroke .15s;}
+  .edge-path.active{stroke:var(--accent);stroke-width:2.2px;}
+  .edge-path.dim{opacity:0.18;}
+  .edge-label{font-family:'IBM Plex Mono',monospace;font-size:10px;fill:var(--text-dim);}
+  .edge-label-bg{fill:var(--panel);}
+  .edge-label.active{fill:var(--accent);}
+
+  .caption{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--text-dim);min-height:16px;}
+  .caption b{color:var(--accent);font-weight:500;}
+
+  .keypoints{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:16px 18px;}
+  .keypoints h3{margin:0 0 10px;font-size:12px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);font-weight:600;}
+  .keypoints ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:8px;}
+  .keypoints li{font-size:13.5px;line-height:1.5;}
+  .keypoints li::marker{color:var(--accent);}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="sidebar">
+    <div class="brand">
+      <h1>Erum Sajid</h1>
+      <p>Design Explorer</p>
+    </div>
+    <div class="search"><input id="search" type="text" placeholder="Filter topics..."></div>
+    <div class="filters">
+      <button data-d="All" class="active">All</button>
+      <button data-d="Easy">Easy</button>
+      <button data-d="Medium">Med</button>
+      <button data-d="Hard">Hard</button>
+    </div>
+    <div class="topic-list" id="topicList"></div>
+  </div>
+
+  <div class="main">
+    <div class="header-row">
+      <h2 id="topicName">—</h2>
+      <span class="badge" id="topicBadge">—</span>
+    </div>
+    <div class="legend">
+      <span><i style="background:var(--node-client);border-color:var(--node-client-b)"></i>Client</span>
+      <span><i style="background:var(--node-gateway);border-color:var(--node-gateway-b)"></i>Gateway / Edge</span>
+      <span><i style="background:var(--node-service);border-color:var(--node-service-b)"></i>Service</span>
+      <span><i style="background:var(--node-queue);border-color:var(--node-queue-b)"></i>Queue (async)</span>
+      <span><i style="background:var(--node-cache);border-color:var(--node-cache-b)"></i>Cache / Index</span>
+      <span><i style="background:var(--node-db);border-color:var(--node-db-b)"></i>Data store</span>
+      <span><i style="background:transparent;border-color:var(--node-external-b);border-style:dashed"></i>External</span>
+    </div>
+    <div class="canvas-wrap"><svg id="canvas" xmlns="http://www.w3.org/2000/svg"></svg></div>
+    <div class="caption" id="caption">Click any node to trace its connections.</div>
+    <div class="keypoints">
+      <h3>Key talking points</h3>
+      <ul id="keypoints"></ul>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ---------- Layout constants ---------- */
+const NODE_W = 150, NODE_H = 52, COL_W = 190, ROW_H = 92, MARGIN = 40;
+
+/* ---------- Topic data ---------- */
+const TOPICS = [
+{ name:"Bitly", difficulty:"Easy",
+  nodes:[
+    {id:"c",label:"Client",type:"client",col:0,row:1},
+    {id:"cdn",label:"CDN",type:"service",col:1,row:0},
+    {id:"lb",label:"Load Balancer (Rate Limiting/Auth)",type:"gateway",col:1,row:1},
+    {id:"app-write",label:"URL Write Server",type:"service",col:2,row:0},
+    {id:"app-read",label:"URL Read Server",type:"service",col:2,row:2},
+    {id:"cache",label:"Redirect Cache",type:"cache",col:4,row:2},
+    {id:"db",label:"URL Mapping DB",type:"db",col:3,row:1},
+    {id:"aq",label:"Analytics Queue",type:"queue",col:2,row:3},
+    {id:"adb",label:"Analytics DB",type:"db",col:3,row:3},
+  ],
+  edges:[
+    {from:"c",to:"lb"},{from:"lb",to:"app-write"},
+    {from:"c",to:"cdn",label:"popular urls"},
+    {from:"lb",to:"app-read"},
+    {from:"app-read",to:"cache",label:"check cache"},
+    {from:"app-write",to:"db",label:""},
+    {from:"app-read",to:"db",label:"cache miss"},
+    {from:"app-read",to:"aq",label:"click event"},
+    {from:"aq",to:"adb"},
+  ],
+  points:[
+    "Base62-encode an auto-increment ID (or pre-allocated key ranges) to generate short codes without collisions.",
+    "Reads vastly outnumber writes, so cache hot redirects aggressively; a cache miss falls through to the mapping DB.",
+    "Click analytics are written async via a queue so redirect latency never waits on analytics writes."
+  ]
+},
+{ name:"Dropbox", difficulty:"Easy",
+  nodes:[
+    {id:"c",label:"Client",type:"client",col:0,row:0},
+    {id:"gw",label:"API Gateway",type:"gateway",col:1,row:0},
+    {id:"meta",label:"Metadata Service",type:"service",col:2,row:0},
+    {id:"metadb",label:"Metadata DB",type:"db",col:3,row:0},
+    {id:"block",label:"Block Storage Svc",type:"service",col:2,row:1},
+    {id:"obj",label:"Object Store (S3)",type:"db",col:3,row:1},
+    {id:"notif",label:"Notification Svc",type:"service",col:2,row:2},
+    {id:"other",label:"Other Clients",type:"client",col:3,row:2},
+  ],
+  edges:[
+    {from:"c",to:"gw"},{from:"gw",to:"meta"},{from:"meta",to:"metadb"},
+    {from:"gw",to:"block",label:"changed blocks"},{from:"block",to:"obj"},
+    {from:"meta",to:"notif",label:"file changed"},{from:"notif",to:"other",label:"push update"},
+  ],
+  points:[
+    "Files are chunked into content-hashed blocks client-side; only changed blocks are re-uploaded (dedupe + bandwidth savings).",
+    "Metadata (folder tree, versions, permissions) is stored separately from raw block storage.",
+    "A notification/long-poll service tells other logged-in devices a change happened so they can sync."
+  ]
+},
+{ name:"Local Delivery (Gopuff)", difficulty:"Easy",
+  nodes:[
+    {id:"cust",label:"Customer App",type:"client",col:0,row:0},
+    {id:"drv",label:"Driver App",type:"client",col:0,row:1},
+    {id:"gw",label:"API Gateway",type:"gateway",col:1,row:0},
+    {id:"order",label:"Order Service",type:"service",col:2,row:0},
+    {id:"orderdb",label:"Order DB",type:"db",col:3,row:0},
+    {id:"inv",label:"Inventory Service",type:"service",col:2,row:1},
+    {id:"invdb",label:"Inventory DB",type:"db",col:3,row:1},
+    {id:"dispatch",label:"Dispatch Service",type:"service",col:2,row:2},
+    {id:"geo",label:"Driver Geo-Index",type:"cache",col:3,row:2},
+  ],
+  edges:[
+    {from:"cust",to:"gw"},{from:"gw",to:"order"},{from:"order",to:"orderdb"},
+    {from:"order",to:"inv",label:"reserve stock"},{from:"inv",to:"invdb"},
+    {from:"order",to:"dispatch"},{from:"dispatch",to:"geo",label:"nearest driver"},
+    {from:"dispatch",to:"drv",label:"assign order"},{from:"drv",to:"geo",label:"location ping"},
+  ],
+  points:[
+    "Single dark-store fulfillment (unlike a marketplace) simplifies inventory: one warehouse owns the order.",
+    "Inventory decrement needs strong-ish consistency to avoid overselling limited local stock.",
+    "A geospatial index (geohash/quadtree) finds the nearest available driver for dispatch."
+  ]
+},
+{ name:"Ticketmaster", difficulty:"Medium",
+  nodes:[
+    {id:"c",label:"Client",type:"client",col:0,row:0},
+    {id:"wr",label:"Virtual Waiting Room",type:"gateway",col:1,row:0},
+    {id:"search",label:"Search Service",type:"service",col:2,row:0},
+    {id:"idx",label:"Search Index",type:"db",col:3,row:0},
+    {id:"booking",label:"Booking Service",type:"service",col:2,row:1},
+    {id:"lock",label:"Seat Hold (TTL)",type:"cache",col:3,row:1},
+    {id:"pay",label:"Payment Service",type:"service",col:2,row:2},
+    {id:"paydb",label:"Payment DB",type:"db",col:3,row:2},
+  ],
+  edges:[
+    {from:"c",to:"wr",label:"queue on-sale traffic"},{from:"wr",to:"search"},{from:"search",to:"idx"},
+    {from:"wr",to:"booking"},{from:"booking",to:"lock",label:"hold seat"},
+    {from:"booking",to:"pay"},{from:"pay",to:"paydb"},
+  ],
+  points:[
+    "A virtual waiting room throttles traffic into the booking path during high-demand on-sales.",
+    "Seat holds use a short-TTL lock (Redis) so a seat isn't double-booked while checkout is in progress.",
+    "The seat is only finalized after idempotent payment confirmation — otherwise the hold expires and releases the seat."
+  ]
+},
+{ name:"FB News Feed", difficulty:"Medium",
+  nodes:[
+    {id:"c",label:"Client",type:"client",col:0,row:0},
+    {id:"gw",label:"Gateway",type:"gateway",col:1,row:0},
+    {id:"feed",label:"Feed Service",type:"service",col:2,row:0},
+    {id:"feedcache",label:"Feed Cache",type:"cache",col:3,row:0},
+    {id:"post",label:"Post Service",type:"service",col:2,row:1},
+    {id:"postdb",label:"Post DB",type:"db",col:3,row:1},
+    {id:"fanout",label:"Fanout Service",type:"service",col:2,row:2},
+    {id:"followdb",label:"Follow Graph DB",type:"db",col:3,row:2},
+  ],
+  edges:[
+    {from:"c",to:"gw"},{from:"gw",to:"feed"},{from:"feed",to:"feedcache",label:"read ranked feed"},
+    {from:"gw",to:"post"},{from:"post",to:"postdb"},
+    {from:"post",to:"fanout",label:"on write"},{from:"fanout",to:"followdb",label:"get followers"},
+    {from:"fanout",to:"feedcache",label:"push post id"},
+  ],
+  points:[
+    "Hybrid fanout: push new posts to followers' feed caches on write for normal users, but pull-on-read for celebrity accounts to avoid huge write amplification.",
+    "A ranking pass scores candidate posts (predicted engagement) before serving, rather than pure reverse-chronological order.",
+    "The feed cache stores precomputed, ranked post IDs per user so reads stay fast."
+  ]
+},
+{ name:"Tinder", difficulty:"Medium",
+  nodes:[
+    {id:"c",label:"Client",type:"client",col:0,row:0},
+    {id:"gw",label:"Gateway",type:"gateway",col:1,row:0},
+    {id:"cand",label:"Candidate Service",type:"service",col:2,row:0},
+    {id:"geo",label:"Geo-Index",type:"cache",col:3,row:0},
+    {id:"swipe",label:"Swipe Service",type:"service",col:2,row:1},
+    {id:"swipedb",label:"Swipe DB",type:"db",col:3,row:1},
+    {id:"matchdet",label:"Match Detector",type:"service",col:2,row:2},
+    {id:"matchdb",label:"Match DB",type:"db",col:3,row:2},
+    {id:"notif",label:"Notification Svc",type:"service",col:2,row:3},
+    {id:"push",label:"Push Provider",type:"external",col:3,row:3},
+  ],
+  edges:[
+    {from:"c",to:"gw"},{from:"gw",to:"cand"},{from:"cand",to:"geo",label:"nearby users"},
+    {from:"gw",to:"swipe"},{from:"swipe",to:"swipedb"},
+    {from:"swipe",to:"matchdet",label:"check mutual"},{from:"matchdet",to:"matchdb"},
+    {from:"matchdet",to:"notif",label:"on match"},{from:"notif",to:"push"},
+  ],
+  points:[
+    "Candidate recommendation is geosharded (geohash buckets) so nearby-user queries stay fast at scale.",
+    "Swipes are a high-volume, append-only write path; mutual-match detection happens asynchronously after the write.",
+    "A match triggers an async push notification rather than blocking the swipe response."
+  ]
+},
+{ name:"LeetCode (Online Judge)", difficulty:"Medium",
+  nodes:[
+    {id:"c",label:"Client",type:"client",col:0,row:0},
+    {id:"gw",label:"Gateway",type:"gateway",col:1,row:0},
+    {id:"sub",label:"Submission Service",type:"service",col:2,row:0},
+    {id:"q",label:"Submission Queue",type:"queue",col:3,row:0},
+    {id:"worker",label:"Sandbox Workers",type:"service",col:4,row:0},
+    {id:"result",label:"Result Store",type:"db",col:5,row:0},
+    {id:"problem",label:"Problem Service",type:"service",col:2,row:1},
+    {id:"problemdb",label:"Problem DB",type:"db",col:3,row:1},
+  ],
+  edges:[
+    {from:"c",to:"gw"},{from:"gw",to:"sub"},{from:"sub",to:"q"},
+    {from:"q",to:"worker"},{from:"worker",to:"result"},
+    {from:"result",to:"c",label:"poll / WS result"},
+    {from:"gw",to:"problem"},{from:"problem",to:"problemdb"},
+  ],
+  points:[
+    "Code executes in sandboxed, resource- and time-limited containers — never trust user code with host access.",
+    "A queue decouples bursty submission traffic from a limited pool of execution workers; autoscale workers on queue depth.",
+    "Clients poll or hold a WebSocket for the async result rather than blocking the HTTP request on execution."
+  ]
+},
+{ name:"WhatsApp", difficulty:"Medium",
+  nodes:[
+    {id:"ca",label:"Client A",type:"client",col:0,row:0},
+    {id:"lb4",label:"Load Balancer 4",type:"gateway",col:2,row:0},
+    {id:"msgsvc",label:"Chat Service",type:"service",col:3,row:0},
+    {id:"msgdb",label:"Message DB",type:"db",col:4,row:0},
+    {id:"q",label:"Redis Pub/Sub",type:"queue",col:3,row:1},
+    {id:"cb",label:"Client B",type:"client",col:0,row:1}
+  ],
+  edges:[
+    {from:"ca",to:"lb4",label:"ws connection"},{from:"cb",to:"lb4",label:"ws connection"},
+    {from:"lb4",to:"msgsvc"},{from:"msgsvc",to:"msgdb"},
+    {from:"q",to:"wsB",label:"route to recipient"},{from:"wsB",to:"cb"},
+    {from:"msgsvc",to:"q"},{from:"q",to:"msgsvc"}
+  ],
+  points:[
+    "Persistent WebSocket connections are sharded across many servers; a routing layer finds which server holds the recipient's connection.",
+    "We are using load Balancer L4 as L7 is not required here.", 
+    "User A connects to chat server (ws connection) and subscribe to the redis pub/sub for that user , message published to the redis will be consumed by User.",
+    "Hearbeat ping/pong will be maintained to know if user is connected through ws.",
+    "Message  Sync : We will maintain a global counter of message, we will send the counter with ping/pong , if doesnot match with client local count then will perform sync operation.",
+    "Offline recipients get store-and-forward: the message is durably persisted and delivered on next connect.",
+    "End-to-end encryption means the server only ever routes ciphertext — it can't read message content."
+  ]
+},
+{ name:"Rate Limiter", difficulty:"Medium",
+  nodes:[
+    {id:"c",label:"Client",type:"client",col:0,row:0},
+    {id:"rl",label:"Rate Limiter",type:"gateway",col:1,row:0},
+    {id:"rules",label:"Rules Config",type:"db",col:2,row:0},
+    {id:"counters",label:"Counters (Redis)",type:"cache",col:2,row:1},
+    {id:"app",label:"App Service",type:"service",col:3,row:0},
+  ],
+  edges:[
+    {from:"c",to:"rl"},
+    {from:"rl",to:"rules",label:"load limit rule"},
+    {from:"rl",to:"counters",label:"check + increment"},
+    {from:"rl",to:"app",label:"allow"},
+    {from:"rl",to:"c",label:"deny: 429"},
+  ],
+  points:[
+    "Token bucket, sliding-window log, and fixed-window counters trade off burst tolerance against memory/accuracy differently.",
+    "Counters live in a centralized store (Redis) so the limit is enforced consistently across many app instances.",
+    "Place the limiter at the edge/gateway so every downstream service is protected, not just one."
+  ]
+},
+{ name:"YouTube", difficulty:"Medium",
+  nodes:[
+    {id:"c",label:"Client",type:"client",col:0,row:0},
+    {id:"gw",label:"Gateway",type:"gateway",col:1,row:0},
+    {id:"upload",label:"Upload Service",type:"service",col:2,row:0},
+    {id:"raw",label:"Raw Storage",type:"db",col:3,row:0},
+    {id:"tq",label:"Transcode Queue",type:"queue",col:3,row:1},
+    {id:"workers",label:"Transcode Workers",type:"service",col:4,row:1},
+    {id:"cdn",label:"CDN",type:"external",col:5,row:1},
+    {id:"stream",label:"Streaming Service",type:"service",col:2,row:2},
+    {id:"meta",label:"Metadata Service",type:"service",col:2,row:3},
+    {id:"metadb",label:"Metadata DB",type:"db",col:3,row:3},
+  ],
+  edges:[
+    {from:"c",to:"gw"},{from:"gw",to:"upload"},{from:"upload",to:"raw"},
+    {from:"upload",to:"tq"},{from:"tq",to:"workers"},{from:"workers",to:"cdn",label:"multiple bitrates"},
+    {from:"gw",to:"stream",label:"playback"},{from:"stream",to:"cdn"},
+    {from:"gw",to:"meta"},{from:"meta",to:"metadb"},
+  ],
+  points:[
+    "Transcoding is async: uploaded video is queued and workers produce multiple resolutions/bitrates for adaptive streaming.",
+    "Playback is served from CDN edge caches, not the origin, to keep latency low and origin load manageable.",
+    "View counts, likes, and comments (metadata) are stored separately from the video blob itself."
+  ]
+},
+{ name:"Job Scheduler", difficulty:"Medium",
+  nodes:[
+    {id:"c",label:"Client / API",type:"client",col:0,row:0},
+    {id:"sched",label:"Scheduler (Leader)",type:"service",col:1,row:0},
+    {id:"jobdb",label:"Job Store",type:"db",col:2,row:0},
+    {id:"zk",label:"Leader Election",type:"external",col:1,row:1},
+    {id:"q",label:"Distributed Queue",type:"queue",col:2,row:1},
+    {id:"worker",label:"Worker Pool",type:"service",col:3,row:1},
+  ],
+  edges:[
+    {from:"c",to:"sched"},{from:"sched",to:"jobdb"},
+    {from:"sched",to:"zk",label:"leader election"},
+    {from:"sched",to:"q",label:"dispatch due jobs"},
+    {from:"q",to:"worker"},{from:"worker",to:"jobdb",label:"update status"},
+  ],
+  points:[
+    "Leader election (ZooKeeper/etcd) ensures only one scheduler instance dispatches a given job — prevents duplicate execution.",
+    "Job state is persisted so crashed workers or schedulers can recover and retry safely.",
+    "Separate priority and delayed queues handle immediate vs future-scheduled jobs."
+  ]
+},
+{ name:"FB Live Comments", difficulty:"Medium",
+  nodes:[
+    {id:"commenter",label:"Commenter",type:"client",col:0,row:0},
+    {id:"wsgw",label:"WS Gateway",type:"gateway",col:1,row:0},
+    {id:"csvc",label:"Comment Service",type:"service",col:2,row:0},
+    {id:"q",label:"Comment Queue",type:"queue",col:3,row:0},
+    {id:"fanout",label:"Fanout Workers",type:"service",col:4,row:0},
+    {id:"pubsub",label:"Pub/Sub Bus",type:"cache",col:5,row:0},
+    {id:"wsgw2",label:"WS Gateway Fleet",type:"gateway",col:1,row:1},
+    {id:"viewers",label:"Viewers",type:"client",col:0,row:1},
+  ],
+  edges:[
+    {from:"commenter",to:"wsgw"},{from:"wsgw",to:"csvc"},{from:"csvc",to:"q"},
+    {from:"q",to:"fanout"},{from:"fanout",to:"pubsub"},
+    {from:"pubsub",to:"wsgw2",label:"broadcast"},{from:"wsgw2",to:"viewers"},
+  ],
+  points:[
+    "A pub/sub backbone fans a single comment out to potentially millions of concurrent viewer connections without polling.",
+    "WebSocket connections are sharded across many gateway servers, coordinated through the shared pub/sub bus.",
+    "Under extreme load, batch or sample comments before fanout to protect downstream capacity."
+  ]
+},
+{ name:"Notification System", difficulty:"Medium",
+  nodes:[
+    {id:"evt",label:"Event Source",type:"external",col:0,row:0},
+    {id:"nsvc",label:"Notification Service",type:"service",col:1,row:0},
+    {id:"pref",label:"Preference Service",type:"service",col:2,row:0},
+    {id:"prefdb",label:"Preferences DB",type:"db",col:3,row:0},
+    {id:"q",label:"Notification Queue",type:"queue",col:2,row:1},
+    {id:"push",label:"Push Worker",type:"service",col:3,row:1},
+    {id:"email",label:"Email Worker",type:"service",col:3,row:2},
+    {id:"sms",label:"SMS Worker",type:"service",col:3,row:3},
+    {id:"provP",label:"Push Provider",type:"external",col:4,row:1},
+    {id:"provE",label:"Email Provider",type:"external",col:4,row:2},
+    {id:"provS",label:"SMS Provider",type:"external",col:4,row:3},
+  ],
+  edges:[
+    {from:"evt",to:"nsvc"},{from:"nsvc",to:"pref"},{from:"pref",to:"prefdb"},
+    {from:"nsvc",to:"q"},{from:"q",to:"push"},{from:"q",to:"email"},{from:"q",to:"sms"},
+    {from:"push",to:"provP"},{from:"email",to:"provE"},{from:"sms",to:"provS"},
+  ],
+  points:[
+    "A queue decouples event producers from slow third-party providers so a stalled provider never backs up the system.",
+    "User preferences/opt-outs are checked per channel before sending.",
+    "Dedupe and rate-limit per user so a burst of triggering events doesn't spam a single recipient."
+  ]
+},
+{ name:"YouTube Top K (Trending)", difficulty:"Hard",
+  nodes:[
+    {id:"events",label:"View Events",type:"external",col:0,row:0},
+    {id:"stream",label:"Stream Processor",type:"service",col:1,row:0},
+    {id:"sketch",label:"Count-Min Sketch",type:"cache",col:2,row:0},
+    {id:"topk",label:"Top-K Store",type:"db",col:3,row:0},
+    {id:"api",label:"API Service",type:"service",col:2,row:1},
+    {id:"client",label:"Client",type:"client",col:3,row:1},
+  ],
+  edges:[
+    {from:"events",to:"stream"},{from:"stream",to:"sketch",label:"sliding window"},
+    {from:"sketch",to:"topk"},{from:"topk",to:"api"},{from:"api",to:"client"},
+  ],
+  points:[
+    "A count-min sketch (or Space-Saving algorithm) approximates per-item counts without storing exact counts for every video.",
+    "Hopping/sliding time windows produce 'trending now' rankings distinct from all-time view counts.",
+    "Top-K results are precomputed and cached, never recomputed on the read path."
+  ]
+},
+{ name:"Uber", difficulty:"Hard",
+  nodes:[
+    {id:"rider",label:"Rider App",type:"client",col:0,row:0},
+    {id:"driver",label:"Driver App",type:"client",col:0,row:1},
+    {id:"gw",label:"Gateway",type:"gateway",col:1,row:0},
+    {id:"trip",label:"Trip Service",type:"service",col:2,row:0},
+    {id:"tripdb",label:"Trip DB",type:"db",col:3,row:0},
+    {id:"locsvc",label:"Location Service",type:"service",col:1,row:1},
+    {id:"geo",label:"Geo-Index",type:"cache",col:2,row:1},
+    {id:"matchsvc",label:"Matching Service",type:"service",col:2,row:2},
+    {id:"pricing",label:"Pricing Service",type:"service",col:3,row:2},
+  ],
+  edges:[
+    {from:"rider",to:"gw"},{from:"gw",to:"trip"},{from:"trip",to:"tripdb"},
+    {from:"driver",to:"locsvc",label:"location ping"},{from:"locsvc",to:"geo"},
+    {from:"trip",to:"matchsvc"},{from:"matchsvc",to:"geo",label:"nearby drivers"},
+    {from:"matchsvc",to:"driver",label:"assign trip"},{from:"matchsvc",to:"pricing",label:"surge check"},
+  ],
+  points:[
+    "A quadtree/geohash index is updated on frequent driver pings, enabling fast nearest-driver queries at city scale.",
+    "Matching balances proximity, driver rating, and ETA — not just nearest distance.",
+    "Pricing is a separate service that adjusts fares dynamically from real-time supply/demand signals."
+  ]
+},
+{ name:"Robinhood", difficulty:"Hard",
+  nodes:[
+    {id:"c",label:"Client",type:"client",col:0,row:0},
+    {id:"gw",label:"Gateway",type:"gateway",col:1,row:0},
+    {id:"q",label:"Order Sequencer",type:"queue",col:2,row:0},
+    {id:"order",label:"Order Service",type:"service",col:3,row:0},
+    {id:"engine",label:"Matching Engine",type:"service",col:4,row:0},
+    {id:"wallet",label:"Wallet / Ledger Svc",type:"service",col:3,row:1},
+    {id:"ledgerdb",label:"Ledger DB",type:"db",col:4,row:1},
+    {id:"marketdata",label:"Market Data Svc",type:"service",col:3,row:2},
+    {id:"exchange",label:"Exchange Feed",type:"external",col:4,row:2},
+  ],
+  edges:[
+    {from:"c",to:"gw"},{from:"gw",to:"q",label:"sequence orders"},{from:"q",to:"order"},
+    {from:"order",to:"engine"},{from:"order",to:"wallet",label:"hold funds"},{from:"wallet",to:"ledgerdb"},
+    {from:"marketdata",to:"exchange"},{from:"marketdata",to:"c",label:"live price stream"},
+  ],
+  points:[
+    "Orders are strictly sequenced (single-writer or sequencer) so ordering is fair and deterministic — critical for trading correctness.",
+    "The ledger demands strong consistency and auditability: double-entry accounting, idempotent transactions, no lost or duplicated funds movement.",
+    "Market data is fanned out to all connected clients in real time via pub/sub, separate from the order path."
+  ]
+},
+{ name:"Google Docs", difficulty:"Hard",
+  nodes:[
+    {id:"ca",label:"Client A",type:"client",col:0,row:0},
+    {id:"cb",label:"Client B",type:"client",col:0,row:1},
+    {id:"ws",label:"WS Gateway",type:"gateway",col:1,row:0},
+    {id:"collab",label:"Collab Engine (OT/CRDT)",type:"service",col:2,row:0},
+    {id:"oplog",label:"Operation Log",type:"db",col:3,row:0},
+    {id:"snap",label:"Snapshot Service",type:"service",col:2,row:1},
+    {id:"docdb",label:"Doc Storage",type:"db",col:3,row:1},
+    {id:"presence",label:"Presence Service",type:"service",col:2,row:2},
+  ],
+  edges:[
+    {from:"ca",to:"ws"},{from:"ws",to:"collab",label:"apply op"},{from:"collab",to:"oplog"},
+    {from:"collab",to:"ws",label:"broadcast transformed op"},{from:"ws",to:"cb"},
+    {from:"collab",to:"snap",label:"periodic snapshot"},{from:"snap",to:"docdb"},
+    {from:"collab",to:"presence",label:"cursor position"},
+  ],
+  points:[
+    "Operational Transformation or CRDTs merge concurrent edits deterministically without locking the document.",
+    "The operation log is the source of truth; periodic snapshots make load times fast and bound storage growth.",
+    "Cursor/selection presence is broadcast on a separate channel from document content changes."
+  ]
+},
+{ name:"Ad Click Aggregator", difficulty:"Hard",
+  nodes:[
+    {id:"clicks",label:"Ad Click Events",type:"external",col:0,row:0},
+    {id:"kafka",label:"Kafka Ingestion",type:"queue",col:1,row:0},
+    {id:"streamproc",label:"Stream Processor",type:"service",col:2,row:0},
+    {id:"olap",label:"OLAP Store",type:"db",col:3,row:0},
+    {id:"rawlog",label:"Raw Log (S3)",type:"db",col:1,row:1},
+    {id:"batch",label:"Batch Reprocess (Spark)",type:"service",col:2,row:1},
+    {id:"querysvc",label:"Query Service",type:"service",col:3,row:1},
+    {id:"dashboard",label:"Dashboard",type:"client",col:4,row:1},
+  ],
+  edges:[
+    {from:"clicks",to:"kafka"},{from:"kafka",to:"streamproc",label:"real-time path"},
+    {from:"streamproc",to:"olap",label:"dedupe + aggregate"},
+    {from:"kafka",to:"rawlog",label:"durable raw copy"},
+    {from:"rawlog",to:"batch",label:"backfill"},{from:"batch",to:"olap",label:"reconcile"},
+    {from:"olap",to:"querysvc"},{from:"querysvc",to:"dashboard"},
+  ],
+  points:[
+    "Lambda architecture: a real-time stream path gives near-instant counts, while a batch path reconciles late/duplicate events for accuracy.",
+    "Idempotency keys dedupe clicks to prevent double counting and ad-fraud inflation.",
+    "Data is pre-aggregated by (ad, time bucket, dimension) so dashboard queries stay fast against an OLAP store."
+  ]
+},
+];
+
+/* ---------- State ---------- */
+let currentFilter = "All";
+let currentTopic = TOPICS[0];
+
+/* ---------- Sidebar rendering ---------- */
+const topicListEl = document.getElementById("topicList");
+const searchEl = document.getElementById("search");
+const filterBtns = document.querySelectorAll(".filters button");
+
+function renderList(){
+  const q = searchEl.value.trim().toLowerCase();
+  const groups = {Easy:[],Medium:[],Hard:[]};
+  TOPICS.forEach(t=>{
+    if(currentFilter!=="All" && t.difficulty!==currentFilter) return;
+    if(q && !t.name.toLowerCase().includes(q)) return;
+    groups[t.difficulty].push(t);
+  });
+  topicListEl.innerHTML = "";
+  ["Easy","Medium","Hard"].forEach(d=>{
+    if(!groups[d].length) return;
+    const label = document.createElement("div");
+    label.className = "group-label";
+    label.textContent = d;
+    topicListEl.appendChild(label);
+    groups[d].forEach(t=>{
+      const btn = document.createElement("button");
+      btn.className = "topic-btn" + (t===currentTopic ? " selected":"");
+      btn.innerHTML = `<span class="dot ${t.difficulty}"></span>${t.name}`;
+      btn.onclick = ()=>{ currentTopic = t; renderList(); renderTopic(t); };
+      topicListEl.appendChild(btn);
+    });
+  });
+}
+searchEl.addEventListener("input", renderList);
+filterBtns.forEach(b=>{
+  b.addEventListener("click", ()=>{
+    filterBtns.forEach(x=>x.classList.remove("active"));
+    b.classList.add("active");
+    currentFilter = b.dataset.d;
+    renderList();
+  });
+});
+
+/* ---------- SVG helpers ---------- */
+const SVG_NS = "http://www.w3.org/2000/svg";
+function se(tag, attrs){
+  const el = document.createElementNS(SVG_NS, tag);
+  for(const k in attrs) el.setAttribute(k, attrs[k]);
+  return el;
+}
+function wrapLabel(label){
+  if(label.length<=16) return [label];
+  const words = label.split(" ");
+  let l1="", l2="";
+  for(const w of words){
+    if((l1+" "+w).trim().length<=16 && !l2) l1=(l1+" "+w).trim();
+    else l2=(l2+" "+w).trim();
+  }
+  return l2 ? [l1,l2] : [l1];
+}
+
+const TYPE_FILL = {
+  client:"var(--node-client)", gateway:"var(--node-gateway)", service:"var(--node-service)",
+  queue:"var(--node-queue)", cache:"var(--node-cache)", db:"var(--node-db)", external:"transparent"
+};
+const TYPE_STROKE = {
+  client:"var(--node-client-b)", gateway:"var(--node-gateway-b)", service:"var(--node-service-b)",
+  queue:"var(--node-queue-b)", cache:"var(--node-cache-b)", db:"var(--node-db-b)", external:"var(--node-external-b)"
+};
+
+function nodeShape(n, x, y){
+  const g = se("g",{});
+  const cx = x+NODE_W/2, cy = y+NODE_H/2;
+  if(n.type==="queue"){
+    const p = se("path",{d:`M ${x+16},${y} L ${x+NODE_W},${y} L ${x+NODE_W-16},${y+NODE_H} L ${x},${y+NODE_H} Z`,
+      fill:TYPE_FILL.queue, stroke:TYPE_STROKE.queue});
+    g.appendChild(p);
+  } else if(n.type==="db"){
+    const ry = 9, w = NODE_W, h = NODE_H;
+    const body = se("path",{d:`M ${x},${y+ry} L ${x},${y+h-ry} A ${w/2},${ry} 0 0 0 ${x+w},${y+h-ry} L ${x+w},${y+ry} A ${w/2},${ry} 0 0 0 ${x},${y+ry} Z`,
+      fill:TYPE_FILL.db, stroke:TYPE_STROKE.db});
+    g.appendChild(body);
+    const lid = se("ellipse",{cx:cx, cy:y+ry, rx:w/2, ry:ry, fill:TYPE_FILL.db, stroke:TYPE_STROKE.db});
+    g.appendChild(lid);
+  } else if(n.type==="cache"){
+    const r = se("rect",{x,y,width:NODE_W,height:NODE_H,rx:16,ry:16,fill:TYPE_FILL.cache,stroke:TYPE_STROKE.cache,"stroke-dasharray":"4 3"});
+    g.appendChild(r);
+  } else if(n.type==="external"){
+    const r = se("rect",{x,y,width:NODE_W,height:NODE_H,rx:6,ry:6,fill:"transparent",stroke:TYPE_STROKE.external,"stroke-dasharray":"5 4"});
+    g.appendChild(r);
+  } else {
+    const r = se("rect",{x,y,width:NODE_W,height:NODE_H,rx:6,ry:6,fill:TYPE_FILL[n.type],stroke:TYPE_STROKE[n.type]});
+    g.appendChild(r);
+  }
+  const lines = wrapLabel(n.label);
+  const startY = lines.length===1 ? cy+4 : cy-3;
+  lines.forEach((line,i)=>{
+    const t = se("text",{x:cx,y:startY+i*14,"text-anchor":"middle"});
+    t.textContent = line;
+    g.appendChild(t);
+  });
+  return g;
+}
+
+function edgePathD(a,b){
+  const NW=NODE_W, NH=NODE_H;
+  if(b.col > a.col){
+    const x1=a.x+NW, y1=a.y+NH/2, x2=b.x, y2=b.y+NH/2;
+    const dx=Math.max(36,(x2-x1)/2);
+    return `M ${x1},${y1} C ${x1+dx},${y1} ${x2-dx},${y2} ${x2},${y2}`;
+  } else if(b.col < a.col){
+    const x1=a.x+NW/2, y1=a.y+NH, x2=b.x+NW/2, y2=b.y+NH;
+    const dip=64;
+    return `M ${x1},${y1} C ${x1},${y1+dip} ${x2},${y2+dip} ${x2},${y2}`;
+  } else {
+    if(b.row>a.row){
+      const x1=a.x+NW/2, y1=a.y+NH, x2=b.x+NW/2, y2=b.y;
+      return `M ${x1},${y1} C ${x1},${y1+18} ${x2},${y2-18} ${x2},${y2}`;
+    } else {
+      const x1=a.x+NW/2, y1=a.y, x2=b.x+NW/2, y2=b.y+NH;
+      return `M ${x1},${y1} C ${x1},${y1-18} ${x2},${y2+18} ${x2},${y2}`;
+    }
+  }
+}
+function edgeMid(a,b,d){
+  // rough midpoint: use path center via col/row average
+  const x1=a.x+NODE_W/2, y1=a.y+NODE_H/2, x2=b.x+NODE_W/2, y2=b.y+NODE_H/2;
+  return {x:(x1+x2)/2, y:(y1+y2)/2};
+}
+
+/* ---------- Diagram rendering ---------- */
+const svg = document.getElementById("canvas");
+let activeNodeId = null;
+
+function renderTopic(topic){
+  activeNodeId = null;
+  document.getElementById("topicName").textContent = topic.name;
+  const badge = document.getElementById("topicBadge");
+  badge.textContent = topic.difficulty;
+  badge.className = "badge " + topic.difficulty;
+
+  const kp = document.getElementById("keypoints");
+  kp.innerHTML = "";
+  topic.points.forEach(p=>{
+    const li = document.createElement("li");
+    li.textContent = p;
+    kp.appendChild(li);
+  });
+  document.getElementById("caption").textContent = "Click any node to trace its connections.";
+
+  // compute positions
+  const posById = {};
+  let maxCol=0, maxRow=0;
+  topic.nodes.forEach(n=>{
+    const x = MARGIN + n.col*COL_W;
+    const y = MARGIN + n.row*ROW_H;
+    posById[n.id] = {...n, x, y};
+    maxCol = Math.max(maxCol, n.col);
+    maxRow = Math.max(maxRow, n.row);
+  });
+  const width = MARGIN*2 + maxCol*COL_W + NODE_W;
+  const height = MARGIN*2 + maxRow*ROW_H + NODE_H + 30;
+
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.setAttribute("width", Math.max(width,600));
+  svg.setAttribute("height", height);
+  svg.innerHTML = "";
+
+  // defs: arrow marker
+  const defs = se("defs",{});
+  const marker = se("marker",{id:"arrow",viewBox:"0 0 10 10",refX:"8",refY:"5",markerWidth:"6",markerHeight:"6",orient:"auto-start-reverse"});
+  const arrowPath = se("path",{d:"M0,0 L10,5 L0,10 Z",fill:"var(--edge)"});
+  marker.appendChild(arrowPath);
+  defs.appendChild(marker);
+  svg.appendChild(defs);
+
+  // edges layer
+  const edgeGroup = se("g",{});
+  const edgeEls = [];
+  topic.edges.forEach(e=>{
+    const a = posById[e.from], b = posById[e.to];
+    if(!a||!b) return;
+    const d = edgePathD(a,b);
+    const path = se("path",{d, class:"edge-path", "marker-end":"url(#arrow)"});
+    path.dataset.from = e.from;
+    path.dataset.to = e.to;
+    edgeGroup.appendChild(path);
+    edgeEls.push({path, from:e.from, to:e.to});
+    if(e.label){
+      const mid = edgeMid(a,b);
+      const bg = se("rect",{x:mid.x-((e.label.length*5.2)/2)-3, y:mid.y-8, width:e.label.length*5.2+6, height:13, class:"edge-label-bg"});
+      const txt = se("text",{x:mid.x, y:mid.y+2, "text-anchor":"middle", class:"edge-label"});
+      txt.textContent = e.label;
+      edgeGroup.appendChild(bg);
+      edgeGroup.appendChild(txt);
+    }
+  });
+  svg.appendChild(edgeGroup);
+
+  // nodes layer
+  const nodeGroup = se("g",{});
+  const nodeEls = {};
+  topic.nodes.forEach(n=>{
+    const pos = posById[n.id];
+    const g = se("g",{class:"node"});
+    g.appendChild(nodeShape(n,pos.x,pos.y));
+    const title = se("title",{});
+    title.textContent = n.label + " (" + n.type + ")";
+    g.appendChild(title);
+    g.addEventListener("click", ()=> toggleActive(n.id));
+    nodeGroup.appendChild(g);
+    nodeEls[n.id] = g;
+  });
+  svg.appendChild(nodeGroup);
+
+  function toggleActive(id){
+    if(activeNodeId===id){ activeNodeId=null; clearHighlight(); return; }
+    activeNodeId = id;
+    let connected = 0;
+    edgeEls.forEach(({path,from,to})=>{
+      const rel = (from===id || to===id);
+      path.classList.toggle("active", rel);
+      path.classList.toggle("dim", !rel);
+      if(rel) connected++;
+    });
+    Object.keys(nodeEls).forEach(nid=>{
+      const rel = nid===id || edgeEls.some(e=> (e.from===id&&e.to===nid) || (e.to===id&&e.from===nid));
+      nodeEls[nid].classList.toggle("dim", !rel);
+    });
+    const n = topic.nodes.find(n=>n.id===id);
+    document.getElementById("caption").innerHTML = `<b>${n.label}</b> — ${connected} connection${connected===1?'':'s'} highlighted. Click again to clear.`;
+  }
+  function clearHighlight(){
+    edgeEls.forEach(({path})=>{ path.classList.remove("active","dim"); });
+    Object.values(nodeEls).forEach(el=>el.classList.remove("dim"));
+    document.getElementById("caption").textContent = "Click any node to trace its connections.";
+  }
+}
+
+/* ---------- Init ---------- */
+renderList();
+renderTopic(currentTopic);
+</script>
+</body>
+</html>
